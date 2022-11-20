@@ -7,6 +7,8 @@
 
 ## Please fill in your project documentation in this README.md file 
 
+This project is an implementation of approximate adder for error tolerant multimedia applications.
+
 Refer to [README](docs/source/index.rst#section-quickstart) for a quickstart of how to use caravel_user_project
 
 Refer to [README](docs/source/index.rst) for this sample project documentation. 
