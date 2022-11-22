@@ -74,92 +74,83 @@ module user_proj_example #(
     wire [`MPRJ_IO_PADS-1:0] io_in;
     wire [`MPRJ_IO_PADS-1:0] io_out;
     wire [`MPRJ_IO_PADS-1:0] io_oeb;
+    
+   wire [15:0] in1, in2;
+    wire [5:0] in3;
+    wire [16:0] out;
+    //wire en_mode;
 
-    wire [31:0] rdata; 
-    wire [31:0] wdata;
-    wire [BITS-1:0] count;
+    assign {in3, in1, in2} = io_in[`MPRJ_IO_PADS-2:0];
+    assign io_out = {21'd0, out};
+    
+    axhrca_ngk_rev_16_8_4 u1 (.a(in1),.b(in2),.sum(out));
+ endmodule
+ 
+ module axhrca_ngk_rev_16_8_4(a,b,sum);
+input [15:0] a,b;
 
-    wire valid;
-    wire [3:0] wstrb;
-    wire [31:0] la_write;
+output [16:0] sum;
 
-    // WB MI A
-    assign valid = wbs_cyc_i && wbs_stb_i; 
-    assign wstrb = wbs_sel_i & {4{wbs_we_i}};
-    assign wbs_dat_o = rdata;
-    assign wdata = wbs_dat_i;
+wire [3:1]cout;
+wire [9 : 15] cout1;
+wire cin;
 
-    // IO
-    assign io_out = count;
-    assign io_oeb = {(`MPRJ_IO_PADS-1){rst}};
-
-    // IRQ
-    assign irq = 3'b000;	// Unused
-
-    // LA
-    assign la_data_out = {{(127-BITS){1'b0}}, count};
-    // Assuming LA probes [63:32] are for controlling the count register  
-    assign la_write = ~la_oenb[63:32] & ~{BITS{valid}};
-    // Assuming LA probes [65:64] are for controlling the count clk & reset  
-    assign clk = (~la_oenb[64]) ? la_data_in[64]: wb_clk_i;
-    assign rst = (~la_oenb[65]) ? la_data_in[65]: wb_rst_i;
-
-    counter #(
-        .BITS(BITS)
-    ) counter(
-        .clk(clk),
-        .reset(rst),
-        .ready(wbs_ack_o),
-        .valid(valid),
-        .rdata(rdata),
-        .wdata(wbs_dat_i),
-        .wstrb(wstrb),
-        .la_write(la_write),
-        .la_input(la_data_in[63:32]),
-        .count(count)
-    );
-
-endmodule
-
-module counter #(
-    parameter BITS = 32
-)(
-    input clk,
-    input reset,
-    input valid,
-    input [3:0] wstrb,
-    input [BITS-1:0] wdata,
-    input [BITS-1:0] la_write,
-    input [BITS-1:0] la_input,
-    output ready,
-    output [BITS-1:0] rdata,
-    output [BITS-1:0] count
-);
-    reg ready;
-    reg [BITS-1:0] count;
-    reg [BITS-1:0] rdata;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            count <= 0;
-            ready <= 0;
-        end else begin
-            ready <= 1'b0;
-            if (~|la_write) begin
-                count <= count + 1;
-            end
-            if (valid && !ready) begin
-                ready <= 1'b1;
-                rdata <= count;
-                if (wstrb[0]) count[7:0]   <= wdata[7:0];
-                if (wstrb[1]) count[15:8]  <= wdata[15:8];
-                if (wstrb[2]) count[23:16] <= wdata[23:16];
-                if (wstrb[3]) count[31:24] <= wdata[31:24];
-            end else if (|la_write) begin
-                count <= la_write & la_input;
-            end
-        end
+assign sum[0]=a[0]^b[0];
+assign cin=a[0]&b[0];
+ascfa4v2 u1 (a[1],b[1],cin,sum[1],cout[1]);
+genvar i;
+generate
+    for(i=2;i<=(3);i=i+1) begin
+        ascfa4v2 u2 (a[i],b[i],cout[i-1],sum[i],cout[i]);
     end
+endgenerate
+
+genvar j;
+generate 
+    for(j=4;j<=(7);j=j+1) begin
+    ascfa4v1 u3 (a[j],b[j],sum[j]);
+    end
+endgenerate
+assign sum[8]=a[7] & b[7];
+
+accfa u4(a[9],b[9],sum[8],sum[9],cout1[9]);
+
+genvar z;
+generate
+ for(z=10;z<=15;z=z+1) begin
+ accfa u5(a[z],b[z],cout1[z-1],sum[z],cout1[z]);
+ end
+endgenerate
+assign sum[16]=cout1[5];
 
 endmodule
+
+
+module accfa(a,b,c,sum,carry);
+input a,b,c;
+output sum,carry;
+wire sum,carry,w;
+assign sum=a^b^c;
+//assign sum = w^c; // sum bit
+assign carry=((a&b) | (b&c) | (a&c)); //carry bit
+endmodule
+
+module ascfa4v1(a,b,sum);
+input a,b;
+output sum;
+wire w3=a|b;
+assign sum= w3;
+
+endmodule
+
+module ascfa4v2(a,b,cin,sum,cout);
+input a,b,cin;
+output sum,cout;
+wire w3=a|b;
+assign sum= w3|cin;
+assign cout= a&b;
+endmodule
+
+
+
 `default_nettype wire
